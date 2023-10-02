@@ -23,7 +23,8 @@ public class Main {
 
             String payload = request.body();
             GitHubWebhookHandler webhookHandler = new GitHubWebhookHandler();
-            webhookHandler.handleWebhookEvent(httpServletRequest,httpServletResponse, payload);
+
+            webhookHandler.handleWebhookIssueEvent(httpServletRequest,httpServletResponse, payload);
 
             //Taking response and custom message from HttpResponse  and return it to user
             response.status(httpServletResponse.getStatus());

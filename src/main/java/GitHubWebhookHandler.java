@@ -24,7 +24,7 @@ public class GitHubWebhookHandler {
         github = GitHub.connectUsingOAuth(dotenv.get(GITHUB_ACCESS_TOKEN));
     }
 
-    public void handleWebhookEvent(HttpServletRequest request, HttpServletResponse response, String payloadJson) {
+    public void handleWebhookIssueEvent(HttpServletRequest request, HttpServletResponse response, String payloadJson) {
         try {
             String eventType = request.getHeader(GITHUB_EVENT);
             String signature = request.getHeader(REQUEST_SIGNATURE);
