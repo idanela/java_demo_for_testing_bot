@@ -1,73 +1,51 @@
+import io.github.cdimascio.dotenv.Dotenv;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GitHub;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.StringReader;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+
 
 public class GitHubWebhookHandler {
 
     private final GitHub github;
+    private final Dotenv dotenv;
 
-    public GitHubWebhookHandler(String accessToken) throws IOException {
-        github = GitHub.connectUsingOAuth(accessToken);
+    private static final String GITHUB_EVENT = "X-GitHub-Event";
+    private static final String REQUEST_SIGNATURE = "x-hub-signature-256";
+    private static final String GITHUB_ACCESS_TOKEN = "GITHUB_TOKEN";
+    private static final String WEBHOOK_SECRET = "WEBHOOK_SECRET";
+
+
+    public GitHubWebhookHandler() throws IOException {
+        dotenv = Dotenv.load();
+        github = GitHub.connectUsingOAuth(dotenv.get(GITHUB_ACCESS_TOKEN));
     }
 
-    public  void handleWebhookEvent(HttpServletRequest request, String payloadJson) {
+    public void handleWebhookEvent(HttpServletRequest request, HttpServletResponse response, String payloadJson) {
         try {
-            // Check the X-GitHub-Event header to determine the event type
-            String eventType = request.getHeader("X-GitHub-Event");
-            if (eventType == null || !verifySignature(payloadJson, eventType)) {
-                // The signature doesn't match, so reject the request
-                System.out.println("Webhook verification failed.");
+            String eventType = request.getHeader(GITHUB_EVENT);
+            String signature = request.getHeader(REQUEST_SIGNATURE);
+            if (eventType == null || !GithubUtils.verifySignature(payloadJson, signature, dotenv.get(WEBHOOK_SECRET))) {
+                response.setHeader("Custom-Message", "Webhook verification failed.");
+                response.setStatus(401);
                 return;
             }
 
-            if ("issues".equals(eventType)) {
-                // Parse the webhook payload into a GHEventPayload
+            if (GithubUtils.isGithubIssue(eventType)) {
+                // Parse the webhook payload into an Issue object
                 StringReader reader = new StringReader(payloadJson);
-                GHEventPayload payload = github.parseEventPayload(reader, GHEventPayload.class);
-
-                // Extract information from the payload
-                String issueTitle = ((GHEventPayload.Issue)payload).getIssue().getTitle();
-                String issueBody = ((GHEventPayload.Issue)payload).getIssue().getBody();
-                ((GHEventPayload.Issue)payload).getIssue().comment("hi" + payload.getSender());
-
-                System.out.println( payload.getRepository().getName());
-                // Use the GitHub API for Java to create an issue or perform actions
-                //github.getRepository(payload.getRepository().getName()).createIssue(issueTitle).body(issueBody).create();
-
-                // Respond to the webhook event
-                // You can send an HTTP response back to GitHub to acknowledge the event.
+                GHEventPayload.Issue payload = github.parseEventPayload(reader, GHEventPayload.Issue.class);
+                if (GithubUtils.isIssueOpened(payload.getAction()))
+                    GithubUtils.postCommentOnIssue(payload.getIssue(), payload.getSender().getLogin());
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-        public boolean verifySignature(String payload, String signature) {
-            try {
-                String algorithm = "HmacSHA1";
-                Mac mac = Mac.getInstance(algorithm);
-                SecretKeySpec secretKeySpec = new SecretKeySpec(System.getenv("WEBHOOK_SECRET").getBytes(), algorithm);
-                mac.init(secretKeySpec);
 
-                byte[] rawHmac = mac.doFinal(payload.getBytes());
-
-                StringBuilder hexString = new StringBuilder();
-                for (byte b : rawHmac) {
-                    hexString.append(String.format("%02x", b));
-                }
-
-                return hexString.toString().equals(signature);
-            } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-                e.printStackTrace();
-                return false;
-            }
-        }
 }
 
