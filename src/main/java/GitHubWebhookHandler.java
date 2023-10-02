@@ -1,16 +1,17 @@
-import org.kohsuke.github.GHEvent;
 import org.kohsuke.github.GHEventPayload;
-import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
-import spark.Spark;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.StringReader;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 
 public class GitHubWebhookHandler {
 
-    private GitHub github;
+    private final GitHub github;
 
     public GitHubWebhookHandler(String accessToken) throws IOException {
         github = GitHub.connectUsingOAuth(accessToken);
@@ -20,6 +21,11 @@ public class GitHubWebhookHandler {
         try {
             // Check the X-GitHub-Event header to determine the event type
             String eventType = request.getHeader("X-GitHub-Event");
+            if (eventType == null || !verifySignature(payloadJson, eventType)) {
+                // The signature doesn't match, so reject the request
+                System.out.println("Webhook verification failed.");
+                return;
+            }
 
             if ("issues".equals(eventType)) {
                 // Parse the webhook payload into a GHEventPayload
@@ -42,4 +48,26 @@ public class GitHubWebhookHandler {
             e.printStackTrace();
         }
     }
+
+        public boolean verifySignature(String payload, String signature) {
+            try {
+                String algorithm = "HmacSHA1";
+                Mac mac = Mac.getInstance(algorithm);
+                SecretKeySpec secretKeySpec = new SecretKeySpec(System.getenv("WEBHOOK_SECRET").getBytes(), algorithm);
+                mac.init(secretKeySpec);
+
+                byte[] rawHmac = mac.doFinal(payload.getBytes());
+
+                StringBuilder hexString = new StringBuilder();
+                for (byte b : rawHmac) {
+                    hexString.append(String.format("%02x", b));
+                }
+
+                return hexString.toString().equals(signature);
+            } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
 }
+

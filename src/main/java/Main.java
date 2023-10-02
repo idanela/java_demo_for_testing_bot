@@ -15,7 +15,7 @@ public class Main {
             HttpServletRequest httpServletRequest = new HttpServletRequestWrapper(request.raw());
 
             String payload = req.body();
-            GitHubWebhookHandler webhookHandler = new GitHubWebhookHandler("YOUR_PERSONAL_ACCESS_TOKEN");
+            GitHubWebhookHandler webhookHandler = new GitHubWebhookHandler( System.getenv("GITHUB_TOKEN"));
             webhookHandler.handleWebhookEvent(httpServletRequest,payload);
 
             // Respond with a 200 OK status to acknowledge receipt
